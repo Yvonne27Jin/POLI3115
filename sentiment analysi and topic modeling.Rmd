@@ -1,0 +1,458 @@
+---
+title: "POLI3115 gp code: sentiment analysis and topic modeling"
+author: "Yvonne JIN"
+date: "4/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(jiebaR)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+```
+
+Data import and formating 
+```{r}
+df <- read_csv("sampled.csv")
+
+# turn off scientific notation for variable "weibo_id"
+df$weibo_id <- format(df$weibo_id, scientific = FALSE)
+
+# dealing with timestamp
+# conversion of timestamp variable into POSIXct format
+df$timestamp <- as.POSIXct(df$timestamp, format = "%Y-%m-%d %H:%M:%S")
+# extract date from timestamp
+df$date <- format(df$timestamp, format = "%Y-%m-%d")
+# calculate no. of post per day
+date_post_n <- df %>%
+  group_by(date) %>%
+  summarise(npost = n())
+
+# take a look at the dataset
+head(df)
+dim(df)
+```
+
+# Text Tokenization
+
+```{r cars}
+
+#Separate tokenized text into documents
+mixseg <- worker()
+# remove "." at the end of sentences (which causes error when stemming)
+df$content=gsub("\\.","",df$content)
+text_seg <- lapply(df$content, function(x) segment(x, mixseg))
+
+# Tokenize each post. Keep weibo id and timestamp as identifiers
+df_seg <- df %>%
+  select(timestamp, user_id, weibo_id) %>%
+  mutate(word = text_seg) %>%
+  unnest("word")
+
+# cleaning 1 unit words ("?" -> sentiment?)
+# 2268k -> 1579k 
+df_seg <- df_seg %>% filter(nchar(word)>1)
+
+```
+
+```{r}
+# save segmented dataset 
+save.image("content_stemmed.RData")
+# save segmented word data
+saveRDS(df_seg, "content_stemmed.rds")
+```
+
+## Sentiment analysis
+
+```{r}
+library("glue")
+library("stringr")
+# loading chinese emotion dictionary
+library(readxl)
+
+# load stemmed word list and 
+df_seg <- readRDS("content_stemmed.rds")
+
+## Finalized dictionary for news documents  ----
+# text frequency by each poster
+text_count <- df_seg %>%
+  group_by(timestamp,user_id, word) %>%
+  count()
+# save word frequency table 
+saveRDS(text_count,"word_freq.rds")
+
+# text frequency in total： 96k distinctive words
+dictionary_t <- text_count %>%
+  group_by(word) %>%
+  summarise(
+    term_frequency = sum(n), 
+    document_frequency = n())
+
+
+# load and process the chinese emotion library
+Emo_dic_chi <- read_excel("情感词汇本体.xlsx")
+colnames(Emo_dic_chi) <- c("word","PoS","meaningN","meaningn",
+                           "emotion","valence","polarity",
+                           "peripheral_emo","valence_p","polarity_p")
+summary(Emo_dic_chi)
+Emo_dic_chi <- Emo_dic_chi[,1:10] #drop NA columns
+head(Emo_dic_chi)
+```
+
+
+Sentiment analysis by each post
+```{r}
+
+## by emotion type 
+emo_post_count <- text_count %>%
+  inner_join(Emo_dic_chi, by = "word") %>%
+  group_by(timestamp,user_id, emotion) %>%
+  summarise(score = sum(n)) %>%
+  pivot_wider(names_from = "emotion", values_from = "score", 
+              values_fill = 0, names_prefix = "emo_chi_count_")
+
+## by sentiment polarity 
+sent_post_count <- text_count %>%
+  inner_join(Emo_dic_chi, by = "word") %>%
+  group_by(timestamp,user_id, polarity) %>%
+  summarise(score = sum(n)) %>%
+  pivot_wider(names_from = "polarity", values_from = "score", 
+              values_fill = 0, names_prefix = "sent_chi_count_")
+
+
+```
+
+
+Sentiment analysis by each day
+```{r}
+# conversion of timestamp variable into
+# POSIXct format
+text_count$timestamp <- as.POSIXct(text_count$timestamp, format = "%Y-%m-%d %H:%M:%S")
+# extract date from timestamp
+text_count$date <- format(text_count$timestamp, format = "%Y-%m-%d")
+
+
+## by emotion type
+emo_date_count <- text_count %>%
+  inner_join(Emo_dic_chi, by = "word") %>%
+  group_by(date, emotion) %>%
+  summarise(score = sum(n)) %>%
+  pivot_wider(names_from = "emotion", values_from = "score", 
+              values_fill = 0, names_prefix = "emo_chi_count_")
+
+## by sentiment polarity 
+sent_date_count <- text_count %>%
+  inner_join(Emo_dic_chi, by = "word") %>%
+  group_by(date, polarity) %>%
+  summarise(score = sum(n)) %>%
+  pivot_wider(names_from = "polarity", values_from = "score", 
+              values_fill = 0, names_prefix = "sent_chi_count_")
+
+```
+
+Visualisation
+```{r}
+
+# add no. of posts info per day
+emo_date_count <- emo_date_count %>% full_join(date_post_n, by = "date")
+sent_date_count <- sent_date_count %>% full_join(date_post_n, by = "date")
+
+# count of sentiment polarity divided by no. of posts per day
+sent_polarity <- ggplot(data = sent_date_count, aes(x = date)) +
+  geom_point(aes(y = sent_chi_count_0/npost, color = "neutral"))+
+  geom_point(aes(y = sent_chi_count_1/npost, color = "positive"))+
+  geom_point(aes(y = sent_chi_count_2/npost, color = "negative")) + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) + 
+  labs(x = "Date", y = "Sentiment",
+       title = "Sentiment Polarity / No. of posts per day") + 
+  theme_minimal()
+sent_polarity
+
+# Calculate the sentimental index of news each day
+sent_date_count <- mutate(sent_date_count, 
+                         sent_index = sent_chi_count_1 - sent_chi_count_2)
+
+sent_index <- ggplot(data = sent_date_count, aes(date, sent_index/npost)) +
+  geom_point() + 
+  geom_line() + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) + 
+  labs(x = "Date", y = "Sentiment", 
+       title = "Diffrence between positive and negative sentiment / No. of posts per day") +
+  theme_minimal()
+  
+sent_index
+
+```
+
+```{r}
+## zoom in to time period after COVID outbreak
+onset <- as.POSIXct("2019-12-10", format = "%Y-%m-%d") # debatable!!
+sent_after_COVID <- sent_date_count %>% filter(date>onset) %>%
+  mutate(sent_index = sent_chi_count_1 - sent_chi_count_2)
+# point plot
+sent_polarity_COVID <- ggplot(data = sent_after_COVID, aes(x = date)) +
+  geom_point(aes(y = sent_chi_count_0/npost, color = "neutral"))+
+  geom_point(aes(y = sent_chi_count_1/npost, color = "positive"))+
+  geom_point(aes(y = sent_chi_count_2/npost, color = "negative")) + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) +
+  labs(x = "Date", y = "Sentiment",
+       title = "Sentiment Polarity / No. of posts per day") + 
+  theme_minimal()
+sent_polarity_COVID
+# sentiment index
+sent_index_COVID <- ggplot(data = sent_after_COVID,mapping =  aes(x = date, y = sent_index/npost,group = 1)) +
+  geom_point() + 
+  geom_line() +
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))+
+  labs(x = "Date", y = "Sentiment", 
+       title = "Diffrence between positive and negative sentiment / No. of posts per day") +
+  theme_minimal() + 
+  geom_hline(yintercept = 0, linetype="dotted", size = 0.3)
+sent_index_COVID
+
+```
+
+```{r}
+save.image("sentiment_analysis_viz.Rdata")
+saveRDS(emo_date_count, "emotion_categorization_by_count.rds")
+saveRDS(sent_date_count, "sentiment_categorization_by_count.rds")
+saveRDS(date_post_n,"npost_bydate.rds")
+```
+
+Add key timepoints to graph
+```{r}
+
+Time <- c("2019-12-01","2020-01-23","2020-01-27",
+                   "2020-02-06","2020-02-13","2020-02-25",
+                   "2020-03-10")
+Event <- c("First Wuhan Patient",
+                    "Lockdown of Wuhan",
+                    "Li Keqiang visited Wuhan",
+                    "Death of Li Wenliang",
+                    "Replacement of Wuhan Communist Party chief",
+                    "Partial lockdown of Italy",
+                    "Xi visited Wuhan")
+timeline <- data.frame(Time = Time, Event = Event)
+
+
+
+g <- sent_index  + 
+  geom_vline(xintercept = Time,
+             linetype="dotted", size = 0.3) 
+
+g
+
+g + geom_text(data = timeline,
+              mapping = aes(x = Time, 
+                            y = rep.int(-10,7), 
+                            label = Event),
+              inherit.aes = FALSE,
+              angle = 90,
+              size = 2.5,
+              hjust = 1)
+
+```
+
+```{r}
+
+# zoom in on COVID period
+
+Time_1 <- c("2020-01-23","2020-01-27","2020-02-06",
+          "2020-02-13","2020-02-25","2020-03-10")
+Event_1 <- c("Lockdown of Wuhan","Li Keqiang visited Wuhan","Death of Li Wenliang",
+           "Replacement of Wuhan Communist Party chief",
+           "Partial lockdown of Italy",
+           "Xi visited Wuhan")
+timeline_1 <- data.frame(Time = Time_1, Event = Event_1)
+
+
+
+g_1 <- sent_index_COVID  + 
+  geom_vline(xintercept = Time_1,
+             linetype="dotted", size = 0.3) 
+
+g_1 + geom_text(data = timeline_1,
+              mapping = aes(x = Time, 
+                            y = rep.int(-0.05,6), 
+                            label = Event),
+              inherit.aes = FALSE,
+              angle = 90,
+              size = 2.5,
+              hjust = 1)
+```
+
+Remaining questions: 
+why significantly less than before outbreak?
+how to measure sentiment in social media posts like  "???"
+
+
+# Topic modeling 
+
+
+```{r}
+library("tm")
+library("topicmodels")
+library("reshape2")
+library("tidytext")
+```
+
+```{r}
+
+# Construct document-term matrix ----
+dtm <- text_count %>% cast_dtm(date, word, n)
+# definition of document-term matrix: https://en.wikipedia.org/wiki/Document-term_matrix
+dim(dtm)
+# 96k words across 183 dates
+
+# Set number of topics
+K <- 10
+
+# Set random number generator seed, ensures that you get the same result if you start with that same seed each time you run the same process
+set.seed(1122)
+
+# compute the LDA model, inference via 1000 iterations of Gibbs sampling
+m_tm <- LDA(dtm, K, method="Gibbs", control=list(iter = 500, verbose = 25))
+saveRDS(m_tm, "model_topicmodel.rds")
+
+## beta: How words map to topics
+sum_tm_beta <- tidy(m_tm, matrix = "beta")
+
+## gamma: How documents map on topics
+sum_tm_gamma <- tidy(m_tm, matrix = "gamma") %>%
+  rename("date" = "document")
+ 
+
+```
+
+
+Visualisation
+```{r}
+# Topics EDA ----
+
+sum_tm_gamma %>%
+  ggplot(aes(x = gamma)) +
+  geom_density() +
+  facet_wrap(~topic) +
+  labs(
+    title = "Topic Modeling Descriptive Statistics",
+    subtitle = "Distribution of gamma"
+  )
+
+
+```
+
+Find valuable topics for interpretation
+```{r}
+
+## 1. Interpret topic meanings using top words ----
+
+### Get top words associated with topics ----
+
+TOP_N_WORD <- 10
+
+topic_top_word <- sum_tm_beta %>%
+  rename("word" = "term") %>%
+  group_by(topic) %>%
+  slice_max(beta, n = TOP_N_WORD) %>%
+  arrange(topic, desc(beta))
+
+write_csv(topic_top_word, "tm_topic_top_word.csv")
+
+TOP_N_DAYS <- 10
+
+topic_top_days <- sum_tm_gamma %>%
+  group_by(topic) %>%
+  slice_max(gamma, n = TOP_N_DAYS) %>%
+  arrange(topic, desc(gamma))
+
+### Visualization 1: Topics in bar charts ----
+
+topic_top_word %>%
+  mutate(word = reorder_within(word, beta, topic)) %>%
+  ggplot(aes(y = word, x = beta)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~topic, scales = "free_y") +
+  scale_y_reordered() + # Very interesting function. Use with reorder_within
+  labs(
+    title = "Topic Modeling",
+    subtitle = "Top words associated with each topic"
+  )
+
+
+### Visualization 2: Topics in word cloud ----
+
+#install.packages("ggwordcloud")
+library("ggwordcloud")
+
+topic_top_word %>%
+  ggplot(aes(label = word, size = beta)) +
+  ggwordcloud::geom_text_wordcloud() +
+  scale_size_area(max_size = 8) +
+  facet_wrap(~factor(topic)) +
+  labs(
+    title = "Topic Modeling: Top words associated with each topic"
+  )
+
+save.image("topic_modeling1.RData")
+
+
+
+
+```
+
+
+Time series visualisation
+```{r}
+
+library(ggplot2)
+
+# summary 
+sum_tm_gamma %>%
+  ggplot(aes(x = news_date,  y = gamma, group = 1)) + 
+  geom_line() +
+  facet_wrap(~topic) +
+  labs(title = "Gamma by date") 
+
+
+gamma_by_topic <- sum_tm_gamma %>% pivot_wider(names_from = "topic", values_from = "gamma", 
+            values_fill = 0, names_prefix = "topic_")
+# topic 3 
+gamma_by_topic %>%
+  ggplot(aes(x = news_date,  y = topic_3, group = 1)) + 
+  geom_line() +
+  labs(title = "Topic 3 : One country two system") + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
+
+# topic 4
+gamma_by_topic %>%
+  ggplot(aes(x = news_date,  y = topic_4, group = 1)) + 
+  geom_line() +
+  labs(title = "Topic 4 : Foreigh intervention") + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
+
+# topic 5
+gamma_by_topic %>%
+  ggplot(aes(x = news_date,  y = topic_5, group = 1)) + 
+  geom_line() +
+  labs(title = "Topic 5 : stability") + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
+
+# topic 7 
+gamma_by_topic %>%
+  ggplot(aes(x = news_date,  y = topic_7, group = 1)) + 
+  geom_line() +
+  labs(title = "Topic 7 : Violence") + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
+
+# topic 10
+gamma_by_topic %>%
+  ggplot(aes(x = news_date,  y = topic_10, group = 1)) + 
+  geom_line() +
+  labs(title = "Topic 10 : Greater bay area") + 
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
+
+```
+
