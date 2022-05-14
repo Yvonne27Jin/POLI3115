@@ -1,0 +1,157 @@
+---
+title: "POLI3115 sub topic"
+author: "Yvonne JIN"
+date: "4/19/2022"
+output: html_document
+---
+
+```{r}
+# load and process the chinese emotion library
+Emo_dic_chi <- read_excel("情感词汇本体.xlsx")
+colnames(Emo_dic_chi) <- c("word","PoS","meaningN","meaningn",
+                           "emotion","valence","polarity",
+                           "peripheral_emo","valence_p","polarity_p")
+Emo_dic_chi <- Emo_dic_chi[,1:10] #drop NA columns
+head(Emo_dic_chi)
+```
+
+
+## text processing for each topic
+```{r}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(jiebaR)
+library(lubridate)
+library(ggplot2)
+library("glue")
+library("stringr")
+library(readxl)
+
+setwd("~/POLI3115/subtopic/")
+fname <- list.files() 
+fname
+
+for (i in seq_along(fname)){ # for each topic
+  # Load database
+  df<- read_csv(fname[i])
+  # id formatting issue
+  df$weibo_id <- format(df$weibo_id, scientific = FALSE)
+  # dealing with timestamp
+  # conversion of timestamp variable into POSIXct format
+  df$timestamp <- as.POSIXct(df$timestamp, format = "%Y-%m-%d %H:%M:%S")
+  # extract date from timestamp
+  df$date <- format(df$timestamp, format = "%Y-%m-%d")
+  # calculate no. of post per day
+  date_post_n <- df %>%
+    group_by(date) %>%
+    summarise(npost = n())
+  # save 
+  foutname <- paste(strsplit(fname[i],"[.]")[[1]][1],'_npost.rds',sep ='')
+  saveRDS(date_post_n,foutname)
+  
+  # tokenize text
+  mixseg <- worker()
+  df$content=gsub("\\.","",df$content)
+  text_seg <- lapply(df$content, function(x) segment(x, mixseg))
+  # Tokenize each post. Keep weibo id and timestamp as identifiers
+  df_seg <- df %>%
+    select(timestamp, user_id, weibo_id) %>%
+    mutate(word = text_seg) %>%
+    unnest("word")
+  # cleaning 1 unit words ("?" -> sentiment?)
+  df_seg <- df_seg %>% filter(nchar(word)>1)
+  
+  ## Finalized dictionary for news documents  ----
+  # text frequency by each poster
+  text_count <- df_seg %>%
+    group_by(timestamp,user_id, word) %>%
+    count()
+  # save word frequency table
+  foutname <- paste(strsplit(fname[i],"[.]")[[1]][1],'_wordfreq.rds',sep ='')
+  #saveRDS(text_count,foutname)
+  
+  # sentiment analysis
+  ## by emotion type 
+  emo_post_count <- text_count %>%
+    inner_join(Emo_dic_chi, by = "word") %>%
+    group_by(timestamp,user_id, emotion) %>%
+    summarise(score = sum(n)) %>%
+    pivot_wider(names_from = "emotion", values_from = "score", 
+                values_fill = 0, names_prefix = "emo_chi_count_")
+  ## save 
+  emo_post_count$timestamp <- as.POSIXct(emo_post_count$timestamp, format = "%Y-%m-%d %H:%M:%S")
+  emo_post_count$date <- format(emo_post_count$timestamp, format = "%Y-%m-%d")
+  foutname <- paste(strsplit(fname[i],"[.]")[[1]][1],'_emotype.csv',sep ='')
+  write_csv(emo_post_count, foutname)
+  
+  ## by sentiment polarity 
+  sent_post_count <- text_count %>%
+    inner_join(Emo_dic_chi, by = "word") %>%
+    group_by(timestamp,user_id, polarity) %>%
+    summarise(score = sum(n)) %>%
+    pivot_wider(names_from = "polarity", values_from = "score", 
+                values_fill = 0, names_prefix = "sent_chi_count_")
+  ## save 
+  sent_post_count$timestamp <- as.POSIXct(sent_post_count$timestamp, format = "%Y-%m-%d %H:%M:%S")
+  sent_post_count$date <- format(sent_post_count$timestamp, format = "%Y-%m-%d")
+  foutname <- paste(strsplit(fname[i],"[.]")[[1]][1],'_polarity.csv',sep ='')
+  write_csv(sent_post_count, foutname)
+  
+  ## average polarity by day
+  text_count$timestamp <- as.POSIXct(text_count$timestamp, format = "%Y-%m-%d %H:%M:%S")
+  text_count$date <- format(text_count$timestamp, format = "%Y-%m-%d")
+  sent_date_count <- text_count %>%
+    inner_join(Emo_dic_chi, by = "word") %>%
+    group_by(date, polarity) %>%
+    summarise(score = sum(n)) %>%
+    pivot_wider(names_from = "polarity", values_from = "score", 
+                values_fill = 0, names_prefix = "sent_chi_count_")
+  # devided by no. post each day
+  sent_date_count <- sent_date_count %>% full_join(date_post_n, by = "date") %>% 
+    mutate(sent0average = sent_chi_count_0/npost,
+           sent1average = sent_chi_count_1/npost,
+           sent2average = sent_chi_count_2/npost)
+  # save
+  foutname <- paste(strsplit(fname[i],"[.]")[[1]][1],'_polarity_averaged.csv',sep ='')
+  write_csv(sent_date_count, foutname)
+}
+
+ ```
+```{r}
+
+for (i in seq_along(fname)){
+
+print(foutname)
+}
+
+
+```
+
+
+1. 李文亮
+2. 方舱
+3. 防护措施（propaganda）
+4. 武汉封城
+5. Li & Xi visiting
+6. removal of Wuhan official (~5days)
+(吹哨人)
+7. retweet of 人日， read original post
+```{r eval=FALSE, include=FALSE}
+# Create indicator of sub topic
+df <- df %>%
+  mutate(about_lwl = str_detect(content, "李文亮")) %>% ## 1
+  mutate(about_fcyy = str_detect(content, "方舱")) %>% ## 2
+  mutate(about_wh = str_detect(content, "武汉")) %>% ## 3
+  mutate(about_lockdown = str_detect(content, "封城")) %>% ## 3 
+  mutate(about_protection = str_detect(content, "防护")) %>%  ## 4
+  mutate(about_lkq = str_detect(content, "李克强")) %>% ## 5
+  mutate(about_blame = str_detect(content, "问责")) %>% ## 6
+  mutate(about_wistle = str_detect(content, "吹哨")) ## 7
+
+summary(df)
+  
+```
+
+
