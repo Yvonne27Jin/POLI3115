@@ -16,7 +16,7 @@ Original dataset：[Zhai, Yujia, 2020, "Weibo COVID dataset", https://doi.org/10
 
 [2.2_sentiment_analysis_topic_modeling.Rmd](https://github.com/Yvonne27Jin/POLI3115/blob/main/code/2.2_sentiment_analysis_topic_modeling.Rmd): Text tokenisation, sentimentt analysis, topic modeling of the sampled data in R. Visualisation included.
 
-[3.1_data_stream_processing-sub topic.ipynb](https://github.com/Yvonne27Jin/POLI3115/blob/main/code/3.1_data_stream_processing-sub topic.ipynb): Filter sub-datasets with key words from the original dataset.
+[3.1_data_stream_processing-sub topic.ipynb](https://github.com/Yvonne27Jin/POLI3115/blob/main/code/3.1_data_stream_processing-subtopic.ipynb): Filter sub-datasets with key words from the original dataset.
 
 [3.2_subtopic_sentiment_analysis.Rmd](https://github.com/Yvonne27Jin/POLI3115/blob/main/code/3.2_subtopic_sentiment_analysis.Rmd): An automated function conducting text processing and sentiment analysis for the sub-topic datasets. Results exported for visualisation in Tableau.
 
