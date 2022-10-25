@@ -1,5 +1,7 @@
 # POLI3115
 
+This is a group project research proposal from POLI3115 Politics and public opinion, HKU. You can read the full version of the proposal [here](https://github.com/Yvonne27Jin/POLI3115/blob/main/Final%20Research%20Proposal.pdf).
+
 ## Data sources:
 
 Original dataset：[Zhai, Yujia, 2020, "Weibo COVID dataset", https://doi.org/10.7910/DVN/DULFFJ, Harvard Dataverse, V1](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DULFFJ)
