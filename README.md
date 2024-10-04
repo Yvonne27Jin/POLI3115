@@ -1,6 +1,6 @@
 # POLI3115
 
-This is a group project research proposal from POLI3115 Politics and public opinion, HKU. You can read the full version of the proposal [here](https://github.com/Yvonne27Jin/POLI3115/blob/main/Final%20Research%20Proposal.pdf).
+Report for POLI3115 Politics and public opinion. You can read the full version of the proposal [here](https://github.com/Yvonne27Jin/POLI3115/blob/main/Final%20Research%20Proposal.pdf).
 
 ## Data sources:
 
