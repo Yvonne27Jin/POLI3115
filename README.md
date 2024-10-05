@@ -28,5 +28,11 @@ Sample data:
 
 [word_freq.rds](https://github.com/Yvonne27Jin/POLI3115/blob/main/code/word_freq.rds): Cleaned word frequency by post and by date, from sampled data.
 
+Snapshots of key findings:
+<img width="850" alt="sentiment index" src="https://github.com/user-attachments/assets/68f53705-4301-41b8-bd35-11dc6660ccf1">
+
+<img width="850" alt="Sentiment trend" src="https://github.com/user-attachments/assets/2c427768-f39d-4f1d-9313-675718ec38be">
+
+<img width="850" alt="Topic" src="https://github.com/user-attachments/assets/0e3c582b-8c4c-4a1a-8f95-0e0fb7fff54c">
 
 
