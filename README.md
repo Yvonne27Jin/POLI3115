@@ -1,6 +1,6 @@
-# POLI3115
 
-Report for POLI3115 Politics and public opinion. You can read the full version of the proposal [here](https://github.com/Yvonne27Jin/POLI3115/blob/main/Final%20Research%20Proposal.pdf).
+
+Politics and public opinion. You can read the full version of the report [here](https://github.com/Yvonne27Jin/POLI3115/blob/main/Final%20Research%20Proposal.pdf).
 
 ## Data sources:
 
